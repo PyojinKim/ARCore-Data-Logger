@@ -7,13 +7,32 @@ import android.app.ActivityManager;
 import android.content.Context;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.PowerManager;
 import android.util.Log;
+import android.widget.Button;
+import android.widget.TextView;
 import android.widget.Toast;
+
+import java.util.Timer;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class MainActivity extends AppCompatActivity {
 
     // properties
-    private final static String LOG_TAG = MainActivity.class.getName();
+    private static final String LOG_TAG = MainActivity.class.getName();
+    private static final double MIN_OPENGL_VERSION = 3.0;
+
+    private ARCoreSession mARCoreSession;
+
+    private Handler mHandler = new Handler();
+    private AtomicBoolean mIsRecording = new AtomicBoolean(false);
+    private PowerManager.WakeLock mWakeLock;
+
+    private Button mStartStopButton;
+    private TextView mLabelInterfaceTime;
+    private Timer mInterfaceTimer = new Timer();
+    private int mSecondCounter = 0;
 
 
     // Android activity lifecycle states
@@ -21,10 +40,38 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        // check Android and OpenGL version
+        if (!checkIsSupportedDeviceOrFinish(this)) {
+            return;
+        }
+
+
+        // setup sessions
+        mARCoreSession = new ARCoreSession(this);
+
+
+        // battery power setting
+        PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        mWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "sensors_data_logger:wakelocktag");
+        mWakeLock.acquire();
+
+
+        // monitor ARCore results
     }
 
 
     // methods
+    public void showToast(final String text) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                Toast.makeText(MainActivity.this, text, Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+
     public static boolean checkIsSupportedDeviceOrFinish(final Activity activity) {
 
         // check Android version
@@ -35,6 +82,7 @@ public class MainActivity extends AppCompatActivity {
             return false;
         }
 
+        // get current OpenGL version
         String openGlVersionString = ((ActivityManager) activity.getSystemService(Context.ACTIVITY_SERVICE))
                 .getDeviceConfigurationInfo()
                 .getGlEsVersion();
@@ -48,5 +96,4 @@ public class MainActivity extends AppCompatActivity {
         }
         return true;
     }
-
 }
