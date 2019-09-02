@@ -7,8 +7,11 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 
 import com.google.ar.core.Camera;
+import com.google.ar.core.CameraIntrinsics;
 import com.google.ar.core.Frame;
+import com.google.ar.core.ImageMetadata;
 import com.google.ar.core.Pose;
+import com.google.ar.core.TrackingFailureReason;
 import com.google.ar.core.TrackingState;
 import com.google.ar.sceneform.FrameTime;
 import com.google.ar.sceneform.ux.ArFragment;
@@ -60,6 +63,7 @@ public class ARCoreSession {
         mIsRecording.set(true);
     }
 
+
     public void stopSession() {
 
         // close text file and reset variables
@@ -73,6 +77,7 @@ public class ARCoreSession {
         mIsWritingFile.set(false);
         mIsRecording.set(false);
     }
+
 
     private void onUpdateFrame(FrameTime frameTime) {
 
@@ -88,20 +93,40 @@ public class ARCoreSession {
         double updateRate = (double) mulSecondToNanoSecond / (double) (timestamp - previousTimestamp);
         previousTimestamp = timestamp;
 
+        CameraIntrinsics cameraIntrinsics = camera.getImageIntrinsics();
+        TrackingState trackingState = camera.getTrackingState();
+        TrackingFailureReason trackingFailureReason = camera.getTrackingFailureReason();
         Pose T_gc = frame.getAndroidSensorPose();
 
+        float qx = T_gc.qx();
+        float qy = T_gc.qy();
+        float qz = T_gc.qz();
+        float qw = T_gc.qw();
+
+        float tx = T_gc.tx();
+        float ty = T_gc.ty();
+        float tz = T_gc.tz();
+
+        try {
+            if (isFileSaved) {
+                mFileStreamer.addARCorePoseRecord(timestamp, qx, qy, qz, qw, tx, ty, tz);
+            }
+        }
 
 
-        Log.d(LOG_TAG, "onUpdateFrame: " + T_gc.toString());
+
+
+        Log.d(LOG_TAG, "T_gc: " + T_gc.toString());
         Log.d(LOG_TAG, "onUpdateFrame: updateRate: " + updateRate);
+        Log.d(LOG_TAG,"qx : " + qx + "/ qy : " + qy + "/ qz : " + qz + "/ qw : " + qw);
+        Log.d(LOG_TAG,"tx : " + tx + "/ ty : " + ty + "/ tz : " + tz);
+        Log.d(LOG_TAG, "---------------------------------------------------------------");
 
 
         /*if (camera.getTrackingState() == TrackingState.TRACKING) {
             Log.d(LOG_TAG, "onUpdateFrame: " + T_gc.toString());
             Log.d(LOG_TAG, "onUpdateFrame: updateRate: " + updateRate);
         }*/
-
-
 
 
     }
@@ -123,7 +148,7 @@ public class ARCoreSession {
 
 
         // methods
-        public void addARCorePoseRecord(final long timestamp, final Pose devicePoseFromARCore) throws IOException, KeyException {
+        public void addARCorePoseRecord(long timestamp, float qx, float qy, float qz, float qw, float tx, float ty, float tz) throws IOException, KeyException {
 
             // execute the block with only one thread
             synchronized (this) {
