@@ -55,6 +55,7 @@
         android:elegantTextHeight="false"
         android:fontFamily="@font/roboto_black"
         android:gravity="center"
+        android:text="@string/ready_title"
         android:textAlignment="center"
         android:textColor="#000000"
         android:textSize="24sp"

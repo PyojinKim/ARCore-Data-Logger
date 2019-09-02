@@ -1,7 +1,6 @@
 package com.pjinkim.arcore_data_logger;
 
 import android.content.Context;
-import android.os.Handler;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -9,7 +8,6 @@ import androidx.annotation.NonNull;
 import com.google.ar.core.Camera;
 import com.google.ar.core.CameraIntrinsics;
 import com.google.ar.core.Frame;
-import com.google.ar.core.ImageMetadata;
 import com.google.ar.core.Pose;
 import com.google.ar.core.TrackingFailureReason;
 import com.google.ar.core.TrackingState;
@@ -19,6 +17,7 @@ import com.google.ar.sceneform.ux.ArFragment;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.security.KeyException;
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ARCoreSession {
@@ -29,12 +28,15 @@ public class ARCoreSession {
     private long previousTimestamp = 0;
 
     private MainActivity mContext;
+    private ArFragment mArFragment;
+    private ARCoreResultStreamer mFileStreamer = null;
 
     private AtomicBoolean mIsRecording = new AtomicBoolean(false);
     private AtomicBoolean mIsWritingFile = new AtomicBoolean(false);
 
-    private ArFragment mArFragment;
-    private ARCoreResultStreamer mFileStreamer;
+    private TrackingState mTrackingState;
+    private TrackingFailureReason mTrackingFailureReason;
+    private double mUpdateRate = 0;
 
 
     // constructor
@@ -107,28 +109,18 @@ public class ARCoreSession {
         float ty = T_gc.ty();
         float tz = T_gc.tz();
 
+        // display and save ARCore information
         try {
+            mTrackingState = trackingState;
+            mTrackingFailureReason = trackingFailureReason;
+            mUpdateRate = updateRate;
             if (isFileSaved) {
                 mFileStreamer.addARCorePoseRecord(timestamp, qx, qy, qz, qw, tx, ty, tz);
             }
+        } catch (IOException | KeyException e) {
+            Log.d(LOG_TAG, "onUpdateFrame: Something is wrong.");
+            e.printStackTrace();
         }
-
-
-
-
-        Log.d(LOG_TAG, "T_gc: " + T_gc.toString());
-        Log.d(LOG_TAG, "onUpdateFrame: updateRate: " + updateRate);
-        Log.d(LOG_TAG,"qx : " + qx + "/ qy : " + qy + "/ qz : " + qz + "/ qw : " + qw);
-        Log.d(LOG_TAG,"tx : " + tx + "/ ty : " + ty + "/ tz : " + tz);
-        Log.d(LOG_TAG, "---------------------------------------------------------------");
-
-
-        /*if (camera.getTrackingState() == TrackingState.TRACKING) {
-            Log.d(LOG_TAG, "onUpdateFrame: " + T_gc.toString());
-            Log.d(LOG_TAG, "onUpdateFrame: updateRate: " + updateRate);
-        }*/
-
-
     }
 
 
@@ -161,13 +153,12 @@ public class ARCoreSession {
                 // record timestamp and 6-DoF device pose in text file
                 StringBuilder stringBuilder = new StringBuilder();
                 stringBuilder.append(timestamp);
-                //
-                //
-                //
-                stringBuilder.append('\n');
+                stringBuilder.append(String.format(Locale.US, " %.6f %.6f %.6f %.6f %.6f %.6f %.6f", qx, qy, qz, qw, tx, ty, tz));
+                stringBuilder.append(" \n");
                 mWriter.write(stringBuilder.toString());
             }
         }
+
 
         @Override
         public void endFiles() throws IOException {
@@ -182,8 +173,15 @@ public class ARCoreSession {
 
 
     // getter and setter
+    public TrackingState getTrackingState() {
+        return mTrackingState;
+    }
 
+    public TrackingFailureReason getTrackingFailureReason() {
+        return mTrackingFailureReason;
+    }
 
-
-
+    public double getUpdateRate() {
+        return mUpdateRate;
+    }
 }

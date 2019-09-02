@@ -1,10 +1,13 @@
 package com.pjinkim.arcore_data_logger;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -26,6 +29,14 @@ public class MainActivity extends AppCompatActivity {
     // properties
     private static final String LOG_TAG = MainActivity.class.getName();
     private static final double MIN_OPENGL_VERSION = 3.0;
+
+    private final static int REQUEST_CODE_ANDROID = 1001;
+    private static String[] REQUIRED_PERMISSIONS = new String[] {
+            Manifest.permission.CAMERA,
+            Manifest.permission.WAKE_LOCK,
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
+    };
 
     private ARCoreSession mARCoreSession;
 
@@ -66,6 +77,15 @@ public class MainActivity extends AppCompatActivity {
 
 
         // monitor ARCore results
+    }
+
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (!hasPermissions(this, REQUIRED_PERMISSIONS)) {
+            requestPermissions(REQUIRED_PERMISSIONS, REQUEST_CODE_ANDROID);
+        }
     }
 
 
@@ -209,6 +229,18 @@ public class MainActivity extends AppCompatActivity {
         if (!mIsRecording.get()) {
             super.onBackPressed();
         }
+    }
+
+
+    private static boolean hasPermissions(Context context, String... permissions) {
+
+        // check Android hardware permissions
+        for (String permission : permissions) {
+            if (ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED) {
+                return false;
+            }
+        }
+        return true;
     }
 
 
