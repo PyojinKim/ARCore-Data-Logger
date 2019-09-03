@@ -18,6 +18,9 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.google.ar.core.TrackingFailureReason;
+import com.google.ar.core.TrackingState;
+
 import java.io.IOException;
 import java.util.Locale;
 import java.util.Timer;
@@ -43,6 +46,8 @@ public class MainActivity extends AppCompatActivity {
     private Handler mHandler = new Handler();
     private AtomicBoolean mIsRecording = new AtomicBoolean(false);
     private PowerManager.WakeLock mWakeLock;
+
+    private TextView mLabelNumberFeatures, mLabelTrackingStatus, mLabelTrackingFailureReason, mLabelUpdateRate;
 
     private Button mStartStopButton;
     private TextView mLabelInterfaceTime;
@@ -76,7 +81,9 @@ public class MainActivity extends AppCompatActivity {
         mWakeLock.acquire();
 
 
-        // monitor ARCore results
+        // monitor ARCore information
+        displayARCoreInformation();
+        mLabelInterfaceTime.setText(R.string.ready_title);
     }
 
 
@@ -135,7 +142,7 @@ public class MainActivity extends AppCompatActivity {
         // output directory for text files
         String outputFolder = null;
         try {
-            OutputDirectoryManager folder = new OutputDirectoryManager("", "R_ARCore");
+            OutputDirectoryManager folder = new OutputDirectoryManager("", "R_pjinkim_ARCore");
             outputFolder = folder.getOutputDirectory();
         } catch (IOException e) {
             Log.e(LOG_TAG, "startRecording: Cannot create output folder.");
@@ -266,7 +273,41 @@ public class MainActivity extends AppCompatActivity {
 
     private void initializeViews() {
 
+        mLabelNumberFeatures = (TextView) findViewById(R.id.label_number_features);
+        mLabelTrackingStatus = (TextView) findViewById(R.id.label_tracking_status);
+        mLabelTrackingFailureReason = (TextView) findViewById(R.id.label_tracking_failure_reason);
+        mLabelUpdateRate = (TextView) findViewById(R.id.label_update_rate);
+
         mStartStopButton = (Button) findViewById(R.id.button_start_stop);
         mLabelInterfaceTime = (TextView) findViewById(R.id.label_interface_time);
+    }
+
+
+    private void displayARCoreInformation() {
+
+        // get ARCore tracking information
+        TrackingState trackingState = mARCoreSession.getTrackingState();
+        TrackingFailureReason trackingFailureReason =  mARCoreSession.getTrackingFailureReason();
+        double updateRate = mARCoreSession.getUpdateRate();
+
+        // update current screen (activity)
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+
+
+
+                mLabelUpdateRate.setText(String.format(Locale.US, "%.3f Hz", updateRate));
+            }
+        });
+
+        // determine display update rate (100 ms)
+        final long displayInterval = 100;
+        mHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                displayARCoreInformation();
+            }
+        }, displayInterval);
     }
 }
