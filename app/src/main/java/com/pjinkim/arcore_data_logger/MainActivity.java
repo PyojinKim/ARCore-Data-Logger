@@ -47,7 +47,8 @@ public class MainActivity extends AppCompatActivity {
     private AtomicBoolean mIsRecording = new AtomicBoolean(false);
     private PowerManager.WakeLock mWakeLock;
 
-    private TextView mLabelNumberFeatures, mLabelTrackingStatus, mLabelTrackingFailureReason, mLabelUpdateRate;
+    private TextView mLabelNumberFeatures, mLabelUpdateRate;
+    private TextView mLabelTrackingStatus, mLabelTrackingFailureReason;
 
     private Button mStartStopButton;
     private TextView mLabelInterfaceTime;
@@ -295,8 +296,37 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void run() {
 
+                // determine TrackingState text
+                String ARCoreTrackingState = "";
+                if (trackingState == TrackingState.PAUSED) {
+                    ARCoreTrackingState = "PAUSED";
+                } else if (trackingState == TrackingState.STOPPED) {
+                    ARCoreTrackingState = "STOPPED";
+                } else if (trackingState == TrackingState.TRACKING) {
+                    ARCoreTrackingState = "TRACKING";
+                } else {
+                    ARCoreTrackingState = "ERROR?";
+                }
 
+                // determine TrackingFailureReason text
+                String ARCoreTrackingFailureReason = "";
+                if (trackingFailureReason == TrackingFailureReason.BAD_STATE) {
+                    ARCoreTrackingFailureReason = "BAD STATE";
+                } else if (trackingFailureReason == TrackingFailureReason.EXCESSIVE_MOTION) {
+                    ARCoreTrackingFailureReason = "FAST MOTION";
+                } else if (trackingFailureReason == TrackingFailureReason.INSUFFICIENT_FEATURES) {
+                    ARCoreTrackingFailureReason = "LOW FEATURES";
+                } else if (trackingFailureReason == TrackingFailureReason.INSUFFICIENT_LIGHT) {
+                    ARCoreTrackingFailureReason = "LOW LIGHT";
+                } else if (trackingFailureReason == TrackingFailureReason.NONE) {
+                    ARCoreTrackingFailureReason = "NONE";
+                } else {
+                    ARCoreTrackingFailureReason = "ERROR?";
+                }
 
+                // update interface screen labels
+                mLabelTrackingStatus.setText(ARCoreTrackingState);
+                mLabelTrackingFailureReason.setText(ARCoreTrackingFailureReason);
                 mLabelUpdateRate.setText(String.format(Locale.US, "%.3f Hz", updateRate));
             }
         });
