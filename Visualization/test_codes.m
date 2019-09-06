@@ -1,5 +1,17 @@
 
 
+% parsing ARCore sensor pose data text file
+textFileDir = 'ARCore_point_cloud.txt';
+textARCorePointData = importdata(textFileDir, delimiter, headerlinesIn);
+ARCorePoseTime = textARCorePointData.data(:,1).';
+ARCorePointCloud = textARCorePointData.data(:,[2 3 4]).';
+
+
+figure;
+numPoints = size(ARCorePointCloud,2);
+scatter3(ARCorePointCloud(1,:), ARCorePointCloud(2,:), ARCorePointCloud(3,:), 40*ones(numPoints,1),'.'); hold on; grid on; axis equal;
+plot_inertial_frame(0.5);
+xlabel('x [m]','fontsize',10); ylabel('y [m]','fontsize',10); zlabel('z [m]','fontsize',10); hold off;
 
 
 % 2) plot ARKit VIO motion estimation results

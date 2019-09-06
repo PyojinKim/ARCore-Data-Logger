@@ -15,7 +15,7 @@ nanoSecondToSecond = 1000000000;
 %% 1) parse ARCore sensor pose data
 
 % parsing ARCore sensor pose data text file
-textFileDir = 'ARCore_pose.txt';
+textFileDir = 'ARCore_sensor_pose.txt';
 textARCorePoseData = importdata(textFileDir, delimiter, headerlinesIn);
 ARCorePoseTime = textARCorePoseData.data(:,1).';
 ARCorePoseTime = (ARCorePoseTime - ARCorePoseTime(1)) ./ nanoSecondToSecond;

@@ -8,6 +8,7 @@ import androidx.annotation.NonNull;
 import com.google.ar.core.Camera;
 import com.google.ar.core.CameraIntrinsics;
 import com.google.ar.core.Frame;
+import com.google.ar.core.PointCloud;
 import com.google.ar.core.Pose;
 import com.google.ar.core.TrackingFailureReason;
 import com.google.ar.core.TrackingState;
@@ -16,6 +17,8 @@ import com.google.ar.sceneform.ux.ArFragment;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
+import java.nio.FloatBuffer;
+import java.nio.IntBuffer;
 import java.security.KeyException;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -29,11 +32,14 @@ public class ARCoreSession {
 
     private MainActivity mContext;
     private ArFragment mArFragment;
+    private PointCloudNode mPointCloudNode;
+    private AccumulatedPointCloud mAccumulatedPointCloud;
     private ARCoreResultStreamer mFileStreamer = null;
 
     private AtomicBoolean mIsRecording = new AtomicBoolean(false);
     private AtomicBoolean mIsWritingFile = new AtomicBoolean(false);
 
+    private int mNumberOfFeatures = 0;
     private TrackingState mTrackingState;
     private TrackingFailureReason mTrackingFailureReason;
     private double mUpdateRate = 0;
@@ -45,7 +51,13 @@ public class ARCoreSession {
         // initialize object and ARCore fragment
         mContext = context;
         mArFragment = (ArFragment) mContext.getSupportFragmentManager().findFragmentById(R.id.ux_fragment);
+        mArFragment.getArSceneView().getPlaneRenderer().setVisible(false);
         mArFragment.getArSceneView().getScene().addOnUpdateListener(this::onUpdateFrame);
+
+        // render 3D point cloud on the screen
+        mPointCloudNode = new PointCloudNode(mContext);
+        mArFragment.getArSceneView().getScene().addChild(mPointCloudNode);
+        mAccumulatedPointCloud = new AccumulatedPointCloud();
     }
 
 
@@ -87,6 +99,7 @@ public class ARCoreSession {
         boolean isFileSaved = (mIsRecording.get() && mIsWritingFile.get());
 
         // obtain current ARCore information
+        mArFragment.onUpdate(frameTime);
         Frame frame = mArFragment.getArSceneView().getArFrame();
         Camera camera = frame.getCamera();
 
@@ -109,14 +122,38 @@ public class ARCoreSession {
         float ty = T_gc.ty();
         float tz = T_gc.tz();
 
+        // update 3D point cloud from ARCore
+        PointCloud pointCloud = frame.acquirePointCloud();
+        mPointCloudNode.visualize(pointCloud);
+        int numberOfFeatures = mAccumulatedPointCloud.getNumberOfFeatures();
+
+        //////////////////////////////////////////////////////////////////////////////////////////
+
+        IntBuffer bufferPointID = pointCloud.getIds();
+        FloatBuffer bufferPoint3D = pointCloud.getPoints();
+
+
         // display and save ARCore information
         try {
+            mNumberOfFeatures = numberOfFeatures;
             mTrackingState = trackingState;
             mTrackingFailureReason = trackingFailureReason;
             mUpdateRate = updateRate;
             if (isFileSaved) {
+
+                // 1) record ARCore 6-DoF sensor pose
                 mFileStreamer.addARCorePoseRecord(timestamp, qx, qy, qz, qw, tx, ty, tz);
+
+                // 2) record ARCore 3D point cloud only for visualization
+                for (int i = 0; i < (bufferPoint3D.limit() / 4); i++) {
+                    int pointID = bufferPointID.get(i);
+                    float pointX = bufferPoint3D.get(i * 4);
+                    float pointY = bufferPoint3D.get(i * 4 + 1);
+                    float pointZ = bufferPoint3D.get(i * 4 + 2);
+                    mAccumulatedPointCloud.appendPointCloud(pointID, pointX, pointY, pointZ);
+                }
             }
+            pointCloud.release();
         } catch (IOException | KeyException e) {
             Log.d(LOG_TAG, "onUpdateFrame: Something is wrong.");
             e.printStackTrace();
@@ -128,14 +165,17 @@ public class ARCoreSession {
     class ARCoreResultStreamer extends FileStreamer {
 
         // properties
-        private BufferedWriter mWriter;
+        private BufferedWriter mWriterPose;
+        private BufferedWriter mWriterPoint;
 
 
         // constructor
         ARCoreResultStreamer(final Context context, final String outputFolder) throws IOException {
             super(context, outputFolder);
-            addFile("ARCore_pose", "ARCore_pose.txt");
-            mWriter = getFileWriter("ARCore_pose");
+            addFile("ARCore_sensor_pose", "ARCore_sensor_pose.txt");
+            addFile("ARCore_point_cloud", "ARCore_point_cloud.txt");
+            mWriterPose = getFileWriter("ARCore_sensor_pose");
+            mWriterPoint = getFileWriter("ARCore_point_cloud");
         }
 
 
@@ -145,17 +185,26 @@ public class ARCoreSession {
             // execute the block with only one thread
             synchronized (this) {
 
-                // check 'mWriter' variable
-                if (mWriter == null) {
-                    throw new KeyException("File writer 'ARCore_pose' not found.");
-                }
-
                 // record timestamp and 6-DoF device pose in text file
                 StringBuilder stringBuilder = new StringBuilder();
                 stringBuilder.append(timestamp);
                 stringBuilder.append(String.format(Locale.US, " %.6f %.6f %.6f %.6f %.6f %.6f %.6f", qx, qy, qz, qw, tx, ty, tz));
                 stringBuilder.append(" \n");
-                mWriter.write(stringBuilder.toString());
+                mWriterPose.write(stringBuilder.toString());
+            }
+        }
+
+
+        public void addARCorePointRecord(final int pointID, final float pointX, final float pointY, final float pointZ) throws IOException, KeyException {
+
+            // execute the block with only one thread
+            synchronized (this) {
+
+                // record 3D point cloud in text file
+                StringBuilder stringBuilder = new StringBuilder();
+                stringBuilder.append(String.format(Locale.US, "%05d %.6f %.6f %.6f", pointID, pointX, pointY, pointZ));
+                stringBuilder.append(" \n");
+                mWriterPoint.write(stringBuilder.toString());
             }
         }
 
@@ -165,14 +214,20 @@ public class ARCoreSession {
 
             // execute the block with only one thread
             synchronized (this) {
-                mWriter.flush();
-                mWriter.close();
+                mWriterPose.flush();
+                mWriterPose.close();
+                mWriterPoint.flush();
+                mWriterPoint.close();
             }
         }
     }
 
 
     // getter and setter
+    public int getNumberOfFeatures() {
+        return mNumberOfFeatures;
+    }
+
     public TrackingState getTrackingState() {
         return mTrackingState;
     }

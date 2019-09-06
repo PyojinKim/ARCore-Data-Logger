@@ -287,6 +287,7 @@ public class MainActivity extends AppCompatActivity {
     private void displayARCoreInformation() {
 
         // get ARCore tracking information
+        int numberOfFeatures = mARCoreSession.getNumberOfFeatures();
         TrackingState trackingState = mARCoreSession.getTrackingState();
         TrackingFailureReason trackingFailureReason =  mARCoreSession.getTrackingFailureReason();
         double updateRate = mARCoreSession.getUpdateRate();
@@ -325,6 +326,7 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 // update interface screen labels
+                mLabelNumberFeatures.setText(String.format(Locale.US, "%03d", numberOfFeatures));
                 mLabelTrackingStatus.setText(ARCoreTrackingState);
                 mLabelTrackingFailureReason.setText(ARCoreTrackingFailureReason);
                 mLabelUpdateRate.setText(String.format(Locale.US, "%.3f Hz", updateRate));
