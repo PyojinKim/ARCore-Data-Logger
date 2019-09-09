@@ -9,7 +9,6 @@
 *.class
 
 # Text files
-Visualization/*.txt
 
 # Generated files
 bin/

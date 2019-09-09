@@ -1,23 +1,33 @@
 package com.pjinkim.arcore_data_logger;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Color;
+import android.graphics.ImageFormat;
+import android.graphics.Matrix;
+import android.graphics.Rect;
+import android.graphics.YuvImage;
+import android.media.Image;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
 
 import com.google.ar.core.Camera;
-import com.google.ar.core.CameraIntrinsics;
 import com.google.ar.core.Frame;
 import com.google.ar.core.PointCloud;
 import com.google.ar.core.Pose;
 import com.google.ar.core.TrackingFailureReason;
 import com.google.ar.core.TrackingState;
+import com.google.ar.core.exceptions.NotYetAvailableException;
 import com.google.ar.sceneform.FrameTime;
 import com.google.ar.sceneform.math.Vector3;
 import com.google.ar.sceneform.ux.ArFragment;
 
 import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.security.KeyException;
@@ -36,6 +46,7 @@ public class ARCoreSession {
     private ArFragment mArFragment;
     private PointCloudNode mPointCloudNode;
     private AccumulatedPointCloud mAccumulatedPointCloud;
+    private WorldToScreenTranslator mWorldToScreenTranslator;
     private ARCoreResultStreamer mFileStreamer = null;
 
     private AtomicBoolean mIsRecording = new AtomicBoolean(false);
@@ -60,6 +71,7 @@ public class ARCoreSession {
         mPointCloudNode = new PointCloudNode(mContext);
         mArFragment.getArSceneView().getScene().addChild(mPointCloudNode);
         mAccumulatedPointCloud = new AccumulatedPointCloud();
+        mWorldToScreenTranslator = new WorldToScreenTranslator();
     }
 
 
@@ -83,14 +95,19 @@ public class ARCoreSession {
     public void stopSession() {
 
         // save ARCore 3D point cloud only for visualization
-        ArrayList<Vector3> point3DLocation = mAccumulatedPointCloud.getPoints();
-        for (int i = 0; i < point3DLocation.size(); i++) {
-            Vector3 currentPoint3DLocation = point3DLocation.get(i);
-            float pointX = currentPoint3DLocation.x;
-            float pointY = currentPoint3DLocation.y;
-            float pointZ = currentPoint3DLocation.z;
+        ArrayList<Vector3> pointsPosition = mAccumulatedPointCloud.getPoints();
+        ArrayList<Vector3> pointsColor = mAccumulatedPointCloud.getColors();
+        for (int i = 0; i < pointsPosition.size(); i++) {
+            Vector3 currentPointPosition = pointsPosition.get(i);
+            Vector3 currentPointColor = pointsColor.get(i);
+            float pointX = currentPointPosition.x;
+            float pointY = currentPointPosition.y;
+            float pointZ = currentPointPosition.z;
+            float r = currentPointColor.x;
+            float g = currentPointColor.y;
+            float b = currentPointColor.z;
             try {
-                mFileStreamer.addARCorePointRecord(pointX, pointY, pointZ);
+                mFileStreamer.addARCorePointRecord(pointX, pointY, pointZ, r, g, b);
             } catch (IOException | KeyException e) {
                 Log.d(LOG_TAG, "stopSession: Something is wrong.");
                 e.printStackTrace();
@@ -125,7 +142,6 @@ public class ARCoreSession {
         double updateRate = (double) mulSecondToNanoSecond / (double) (timestamp - previousTimestamp);
         previousTimestamp = timestamp;
 
-        CameraIntrinsics cameraIntrinsics = camera.getImageIntrinsics();
         TrackingState trackingState = camera.getTrackingState();
         TrackingFailureReason trackingFailureReason = camera.getTrackingFailureReason();
         Pose T_gc = frame.getAndroidSensorPose();
@@ -159,18 +175,91 @@ public class ARCoreSession {
                 mFileStreamer.addARCorePoseRecord(timestamp, qx, qy, qz, qw, tx, ty, tz);
 
                 // 2) record ARCore 3D point cloud only for visualization
+                Image imageFrame = frame.acquireCameraImage();
+                Bitmap imageBitmap = imageToBitmap(imageFrame);
+                imageFrame.close();
                 for (int i = 0; i < (bufferPoint3D.limit() / 4); i++) {
+
+                    // check each point's confidence level
+                    float pointConfidence = bufferPoint3D.get(i * 4 + 3);
+                    if (pointConfidence < 0.5) {
+                        continue;
+                    }
+
+                    // obtain point ID and XYZ world position
                     int pointID = bufferPointID.get(i);
                     float pointX = bufferPoint3D.get(i * 4);
                     float pointY = bufferPoint3D.get(i * 4 + 1);
                     float pointZ = bufferPoint3D.get(i * 4 + 2);
-                    mAccumulatedPointCloud.appendPointCloud(pointID, pointX, pointY, pointZ);
+
+                    // get each point RGB color information
+                    float[] worldPosition = new float[]{pointX, pointY, pointZ};
+                    Vector3 pointColor = getScreenPixel(worldPosition, imageBitmap);
+                    if (pointColor == null) {
+                        continue;
+                    }
+
+                    // append each point position and color information
+                    mAccumulatedPointCloud.appendPointCloud(pointID, pointX, pointY, pointZ, pointColor.x, pointColor.y, pointColor.z);
                 }
             }
-        } catch (IOException | KeyException e) {
+        } catch (IOException | KeyException | NotYetAvailableException e) {
             Log.d(LOG_TAG, "onUpdateFrame: Something is wrong.");
             e.printStackTrace();
         }
+    }
+
+
+    private Bitmap imageToBitmap (Image image) {
+        int width = image.getWidth();
+        int height = image.getHeight();
+
+        byte[] nv21;
+        ByteBuffer yBuffer = image.getPlanes()[0].getBuffer();
+        ByteBuffer uBuffer = image.getPlanes()[1].getBuffer();
+        ByteBuffer vBuffer = image.getPlanes()[2].getBuffer();
+
+        int ySize = yBuffer.remaining();
+        int uSize = uBuffer.remaining();
+        int vSize = vBuffer.remaining();
+
+        nv21 = new byte[ySize + uSize + vSize];
+
+        // U and V are swapped
+        yBuffer.get(nv21, 0, ySize);
+        vBuffer.get(nv21, ySize, vSize);
+        uBuffer.get(nv21, ySize + vSize, uSize);
+
+        YuvImage yuvImage = new YuvImage(nv21, ImageFormat.NV21, width, height, null);
+        ByteArrayOutputStream os = new ByteArrayOutputStream();
+        yuvImage.compressToJpeg(new Rect(0, 0, width, height), 100, os);
+        byte[] jpegByteArray = os.toByteArray();
+        Bitmap bitmap = BitmapFactory.decodeByteArray(jpegByteArray, 0, jpegByteArray.length);
+
+        Matrix matrix = new Matrix();
+        matrix.setRotate(90);
+
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+    }
+
+
+    private Vector3 getScreenPixel(float[] worldPosition, Bitmap imageBitmap) throws NotYetAvailableException {
+
+        // clip to screen space (ViewMatrix * ProjectionMatrix * Anchor Matrix)
+        double[] pos2D = mWorldToScreenTranslator.worldToScreen(imageBitmap.getWidth(), imageBitmap.getHeight(), mArFragment.getArSceneView().getArFrame().getCamera(), worldPosition);
+
+        // check if inside the screen
+        if ((pos2D[0] < 0) || (pos2D[0] > imageBitmap.getWidth()) || (pos2D[1] < 0) || (pos2D[1] > imageBitmap.getHeight())) {
+            return null;
+        }
+
+        int pixel = imageBitmap.getPixel((int) pos2D[0], (int) pos2D[1]);
+        int r = Color.red(pixel);
+        int g = Color.green(pixel);
+        int b = Color.blue(pixel);
+        Vector3 pointColor = new Vector3(r, g, b);
+
+        return pointColor;
     }
 
 
@@ -208,14 +297,14 @@ public class ARCoreSession {
         }
 
 
-        public void addARCorePointRecord(final float pointX, final float pointY, final float pointZ) throws IOException, KeyException {
+        public void addARCorePointRecord(final float pointX, final float pointY, final float pointZ, final float r, final float g, final float b) throws IOException, KeyException {
 
             // execute the block with only one thread
             synchronized (this) {
 
                 // record 3D point cloud in text file
                 StringBuilder stringBuilder = new StringBuilder();
-                stringBuilder.append(String.format(Locale.US, "%.6f %.6f %.6f", pointX, pointY, pointZ));
+                stringBuilder.append(String.format(Locale.US, "%.6f %.6f %.6f %.2f %.2f %.2f", pointX, pointY, pointZ, r, g, b));
                 stringBuilder.append(" \n");
                 mWriterPoint.write(stringBuilder.toString());
             }

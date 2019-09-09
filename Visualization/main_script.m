@@ -61,8 +61,7 @@ textARCorePointData = importdata(textFileDir, delimiter, headerlinesIn);
 
 % ARCore 3D point cloud
 ARCorePoints = textARCorePointData.data(:,[1:3]).';
-ARCoreColorsYCbCr = textARCorePointData.data(:,[4:6]).';
-ARCoreColors = YCbCr2RGB(ARCoreColorsYCbCr);
+ARCoreColors = textARCorePointData.data(:,[4:6]).';
 numPoints = size(ARCorePoints,2);
 
 
