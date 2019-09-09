@@ -197,6 +197,11 @@ public class MainActivity extends AppCompatActivity {
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
+                mLabelNumberFeatures.setText("N/A");
+                mLabelTrackingStatus.setText("N/A");
+                mLabelTrackingFailureReason.setText("N/A");
+                mLabelUpdateRate.setText("N/A");
+
                 mStartStopButton.setEnabled(true);
                 mStartStopButton.setText(R.string.start_title);
             }
@@ -326,7 +331,7 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 // update interface screen labels
-                mLabelNumberFeatures.setText(String.format(Locale.US, "%03d", numberOfFeatures));
+                mLabelNumberFeatures.setText(String.format(Locale.US, "%05d", numberOfFeatures));
                 mLabelTrackingStatus.setText(ARCoreTrackingState);
                 mLabelTrackingFailureReason.setText(ARCoreTrackingFailureReason);
                 mLabelUpdateRate.setText(String.format(Locale.US, "%.3f Hz", updateRate));

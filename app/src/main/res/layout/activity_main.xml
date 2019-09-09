@@ -100,13 +100,13 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="8dp"
         android:fontFamily="@font/roboto"
-        android:text="999"
+        android:text="99999"
         android:textAlignment="textStart"
         android:textColor="#000000"
         android:textSize="18sp"
         app:layout_constraintBaseline_toBaselineOf="@+id/textView5"
         app:layout_constraintStart_toEndOf="@+id/textView5"
-        tools:text="999" />
+        tools:text="99999" />
 
     <TextView
         android:id="@+id/label_tracking_status"

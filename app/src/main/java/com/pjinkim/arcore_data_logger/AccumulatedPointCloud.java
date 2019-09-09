@@ -42,4 +42,8 @@ public class AccumulatedPointCloud {
     public int getNumberOfFeatures() {
         return mNumberOfFeatures;
     }
+
+    public ArrayList<Vector3> getPoints() {
+        return mPoints;
+    }
 }

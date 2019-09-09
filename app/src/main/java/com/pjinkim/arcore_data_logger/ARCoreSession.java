@@ -13,6 +13,7 @@ import com.google.ar.core.Pose;
 import com.google.ar.core.TrackingFailureReason;
 import com.google.ar.core.TrackingState;
 import com.google.ar.sceneform.FrameTime;
+import com.google.ar.sceneform.math.Vector3;
 import com.google.ar.sceneform.ux.ArFragment;
 
 import java.io.BufferedWriter;
@@ -20,6 +21,7 @@ import java.io.IOException;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.security.KeyException;
+import java.util.ArrayList;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -80,6 +82,21 @@ public class ARCoreSession {
 
     public void stopSession() {
 
+        // save ARCore 3D point cloud only for visualization
+        ArrayList<Vector3> point3DLocation = mAccumulatedPointCloud.getPoints();
+        for (int i = 0; i < point3DLocation.size(); i++) {
+            Vector3 currentPoint3DLocation = point3DLocation.get(i);
+            float pointX = currentPoint3DLocation.x;
+            float pointY = currentPoint3DLocation.y;
+            float pointZ = currentPoint3DLocation.z;
+            try {
+                mFileStreamer.addARCorePointRecord(pointX, pointY, pointZ);
+            } catch (IOException | KeyException e) {
+                Log.d(LOG_TAG, "stopSession: Something is wrong.");
+                e.printStackTrace();
+            }
+        }
+
         // close text file and reset variables
         if (mIsWritingFile.get()) {
             try {
@@ -124,14 +141,11 @@ public class ARCoreSession {
 
         // update 3D point cloud from ARCore
         PointCloud pointCloud = frame.acquirePointCloud();
-        mPointCloudNode.visualize(pointCloud);
-        int numberOfFeatures = mAccumulatedPointCloud.getNumberOfFeatures();
-
-        //////////////////////////////////////////////////////////////////////////////////////////
-
         IntBuffer bufferPointID = pointCloud.getIds();
         FloatBuffer bufferPoint3D = pointCloud.getPoints();
-
+        mPointCloudNode.visualize(pointCloud);
+        int numberOfFeatures = mAccumulatedPointCloud.getNumberOfFeatures();
+        pointCloud.release();
 
         // display and save ARCore information
         try {
@@ -153,7 +167,6 @@ public class ARCoreSession {
                     mAccumulatedPointCloud.appendPointCloud(pointID, pointX, pointY, pointZ);
                 }
             }
-            pointCloud.release();
         } catch (IOException | KeyException e) {
             Log.d(LOG_TAG, "onUpdateFrame: Something is wrong.");
             e.printStackTrace();
@@ -195,14 +208,14 @@ public class ARCoreSession {
         }
 
 
-        public void addARCorePointRecord(final int pointID, final float pointX, final float pointY, final float pointZ) throws IOException, KeyException {
+        public void addARCorePointRecord(final float pointX, final float pointY, final float pointZ) throws IOException, KeyException {
 
             // execute the block with only one thread
             synchronized (this) {
 
                 // record 3D point cloud in text file
                 StringBuilder stringBuilder = new StringBuilder();
-                stringBuilder.append(String.format(Locale.US, "%05d %.6f %.6f %.6f", pointID, pointX, pointY, pointZ));
+                stringBuilder.append(String.format(Locale.US, "%.6f %.6f %.6f", pointX, pointY, pointZ));
                 stringBuilder.append(" \n");
                 mWriterPoint.write(stringBuilder.toString());
             }
